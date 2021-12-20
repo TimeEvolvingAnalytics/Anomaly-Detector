@@ -3,10 +3,67 @@ from flask import request
 import pandas as pd
 import json
 from pathlib import Path
+import time
+import atexit
+from apscheduler.schedulers.background import BackgroundScheduler
+import sys
+from influx_connector import InfluxConnector
+from riot_connector import RioTConnector
 
 app = Flask(__name__)
-
 _STATUS = 200
+riot_connector = None
+influx_connector = None
+# TODO bisogna ritornare tutto come json e non come html
+
+
+# Declaration of the task as a function.
+def check_new_data(*args):
+    tags = ['dst', 'dstp', 'service', 'src', 'srcp', 'url']
+    riot_connector = args[0]
+    influx_connector = args[1]
+
+    for tag in tags:
+        path = 'anomaly_detector/dataset/lists/' + tag
+        df = pd.read_csv(path + '.csv', header=0)
+        l = df['_value'].tolist()
+        q = 'import "influxdata/influxdb/schema"\
+            schema.tagValues(\
+            bucket: "riot",\
+            tag: "' + tag + '",\
+            start: ' + riot_connector.get_frequency() + ')'
+        # system.exit(0)
+        org = influx_connector.get_org()
+        query_api = influx_connector.get_influxdb_connection()
+        result = query_api.query(org=org, query=q)
+        results = []
+        for table in result:
+            for record in table.records:
+                results.append((record.get_value()))
+        diffs = list(set(results) - set(l))
+        if len(diffs) != 0:
+            # call API
+            print('*** New ' + tag + ' ***')
+            for diff in diffs:
+                # print(diff)
+                new_row = {'_value': diff}
+                df = df.append(new_row, ignore_index=True)
+        df.to_csv(path + '.csv', index=False)
+
+
+def periodic_update(riot_connector, influx_connector):
+    # Create the background scheduler
+    scheduler = BackgroundScheduler()
+    # Create the job
+    scheduler.add_job(func=check_new_data,
+                      trigger="interval",
+                      seconds=riot_connector.get_frequency(),
+                      args=(riot_connector, influx_connector))
+    # Start the scheduler
+    scheduler.start()
+    # /!\ IMPORTANT /!\ : Shut down the scheduler when exiting the app
+    atexit.register(lambda: scheduler.shutdown())
+
 
 @app.route("/")
 def hello_world():
@@ -87,4 +144,11 @@ def verify_anomalies(measurement, uuid):
 
 
 if __name__ == "__main__":
+    config = sys.argv[1:]
+    riot_config = config[:3]
+    riot_connector = RioTConnector(riot_config[0], riot_config[1], riot_config[2])
+    riot_connector.get_config_param()
+    connection_config = config[3:7]
+    influx_connector = InfluxConnector(connection_config[0], connection_config[1], connection_config[2], connection_config[3])
+    periodic_update(riot_connector, influx_connector)
     app.run()
