@@ -47,6 +47,7 @@ def get_measurement_stats_hash(measurement, hash):
         hash_decoded = bytes.fromhex(hash).decode('utf-8')
         data = pd.read_csv(path)
         data = data[data['hash_table']==hash_decoded]
+        data['hash_table'] = hash
         return data.to_html()
 
 
@@ -71,6 +72,7 @@ def get_measurement_anomalies(measurement):
         return "<p>" + measurement + ": Invalid Entity."
     else:
         data = pd.read_csv(path)
+        data['hash_table'] = data['hash_table'].apply(lambda row: row.encode('utf8').hex())
         return data.to_html()
 
 
