@@ -2,14 +2,13 @@ import hashlib
 import requests
 import time
 import random
+import logging
 
 
 class RioTConnector:
     """
     Connection to RioT server
     """
-    # TODO aggiungere try e catch per gestire le eccezioni e lo stato interno
-
     #method = 'GET'
     #uri = '/global'  # use '/global' to access the variables, '/auth' only for the authentication
     #username = 'service'
@@ -23,7 +22,10 @@ class RioTConnector:
         self._frequency = 24
 
     def get_frequency(self):
-        return self._frequency * 60 * 60  # transform in seconds
+        return self._frequency
+
+    def get_tolerance(self):
+        return self._tolerance
 
     def create_auth(self, method):
         hash1 = '7CC384C2A10CEA62FB2A37CFDA222C04'
@@ -46,6 +48,16 @@ class RioTConnector:
 
         return "oasis username=\"" + self._username + "\", nonce=\"" + nonce + "\", authority=\"" + authority + "\""
 
+    def _update_values(self, tol, freq):
+        if 2 <= tol <= 6:
+            self._tolerance = tol
+        else:
+            self._tolerance = 3
+        if 1 <= freq <= 168:
+            self._frequency = freq
+        else:
+            self._frequency = 24
+
     def get_config_param(self):
         headers = {
             'Authorization': self.create_auth('GET'),
@@ -55,16 +67,15 @@ class RioTConnector:
         _uri = self._uri + "?expand"
         response = requests.get(self._base_uri + _uri, headers=headers)
 
+        log = logging.getLogger('__main__')
+
         if response.status_code == 200:
-            # TODO in console, print in stderror
-            print("The request was a success!")
-            print('The tolerance is ' + str(response.json()['keys']['net_anomoly']['tolerance']))
-            print('The frequency is ' + str(response.json()['keys']['net_anomoly']['frequency']))
-            # TODO bisogna fare un controllo??
-            self._tolerance = response.json()['keys']['net_anomoly']['tolerance']
-            self._frequency = response.json()['keys']['net_anomoly']['frequency']
+            tol = response.json()['keys']['net_anomoly']['tolerance']
+            freq = response.json()['keys']['net_anomoly']['frequency']
+            self._update_values(tol, freq)
         elif response.status_code == 404:
             print("Error 404")
+            log.error('Error 404 in connecting to RioT server')
         elif response.status_code == 401:
-            print("401: Unauthorized")
+            log.error('Error 401: Unauthorized access in connecting to RioT server')
         return self._tolerance, self._frequency

@@ -11,6 +11,9 @@ class InfluxConnector:
         self._token = token
         self._url = url
 
+    def get_bucket(self):
+        return self._bucket
+
     def set_bucket(self, new_bucket):
         self._bucket = new_bucket
 
