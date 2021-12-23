@@ -16,8 +16,8 @@ app = Flask(__name__)
 riot_connector = None
 influx_connector = None
 logger = None
+PATH = os.path.abspath(os.path.dirname(__file__))
 
-# todo absolute path
 
 # Declaration of the task as a function.
 def check_new_data(*args):
@@ -26,7 +26,7 @@ def check_new_data(*args):
     influx_connector = args[1]
 
     for tag in tags:
-        path = 'anomaly_detector/dataset/lists/' + tag
+        path = PATH+'/dataset/lists/' + tag
         df = pd.read_csv(path + '.csv', header=0)
         l = df['_value'].tolist()
         q = 'import "influxdata/influxdb/schema"\
@@ -34,7 +34,6 @@ def check_new_data(*args):
             bucket:"' + influx_connector.get_bucket() + '",\
             tag: "' + tag + '",\
             start: -' + str(riot_connector.get_frequency()) + 'h)'
-        # system.exit(0)
         org = influx_connector.get_org()
         query_api = influx_connector.get_influxdb_connection()
         try:
@@ -96,9 +95,9 @@ def check_new_anomalies(*args):
     influx_connector = args[1]
 
     for m in measurements:
-        path = 'anomaly_detector/dataset/stats/' + m
+        path = PATH+'/dataset/stats/' + m
         stats_dict = pd.read_csv(path + '.csv', header=0).set_index('hash_table').T.to_dict('list')
-        s = pd.read_csv('anomaly_detector/dataset/lists/service.csv', header=0)
+        s = pd.read_csv(PATH+'/dataset/lists/service.csv', header=0)
         services = s['_value'].tolist()
         f = ''
         for service in services:
@@ -138,12 +137,12 @@ def check_new_anomalies(*args):
                 # TODO call API POST e aggiungere try catch per gestire la post
                 anomalies_drop = anomalies.drop(['_value_diff_squared', 'new_hash', 'anomaly_diff'], axis=1)
                 anomalies_drop.index.names = ['uuid']
-                if os.stat('anomaly_detector/dataset/anomalies/' + m + '.csv').st_size == 0:
-                    anomalies_drop.to_csv('anomaly_detector/dataset/anomalies/' + m + '.csv', index=True)
+                if os.stat(PATH+'/dataset/anomalies/' + m + '.csv').st_size == 0:
+                    anomalies_drop.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
                 else:
-                    existing_anomalies = pd.read_csv('anomaly_detector/dataset/anomalies/' + m + '.csv').append(
+                    existing_anomalies = pd.read_csv(PATH+'/dataset/anomalies/' + m + '.csv').append(
                         anomalies_drop, ignore_index=True)
-                    existing_anomalies.to_csv('anomaly_detector/dataset/anomalies/' + m + '.csv', index=True)
+                    existing_anomalies.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
             normalities = df.loc[(df['anomaly_diff'] == 0) & (df['new_hash'] == 0)]
             if normalities.shape[0] != 0:
                 for index, row in normalities.iterrows():
@@ -182,20 +181,19 @@ def periodic_update(riot_connector, influx_connector):
 
 
 @app.route("/")
-# TODO README su come navigare nel back-end
-def hello_world():
-    return "<p>Hello, World!</p>"
+# TODO scrivere bene il file di testo su come navigare nel back-end
+def home():
+    return send_file('info.txt')
 
 
 @app.route("/status", methods=['GET'])
 def get_status():
     return send_file('status.log')
-    #return 'The status of the Anomaly Detector is ' + str(_STATUS)
 
 
 @app.route("/<measurement>/stats", methods=['GET'])
 def get_measurement_stats(measurement):
-    path = 'anomaly_detector/dataset/stats/'+measurement+'.csv'
+    path = PATH+'/dataset/stats/'+measurement+'.csv'
     try:
         abs_path = Path(path).resolve(strict=True)
     except FileNotFoundError:
@@ -212,7 +210,7 @@ def get_measurement_stats(measurement):
 
 @app.route("/<measurement>/stats/<hash>", methods=['GET'])
 def get_measurement_stats_hash(measurement, hash):
-    path = 'anomaly_detector/dataset/stats/'+measurement+'.csv'
+    path = PATH+'/dataset/stats/'+measurement+'.csv'
     try:
         abs_path = Path(path).resolve(strict=True)
     except FileNotFoundError:
@@ -228,7 +226,7 @@ def get_measurement_stats_hash(measurement, hash):
 
 @app.route("/<entity_type>", methods=['GET'])
 def get_entity_type(entity_type):
-    path = 'anomaly_detector/dataset/lists/'+entity_type+'.csv'
+    path = PATH+'/dataset/lists/'+entity_type+'.csv'
     try:
         abs_path = Path(path).resolve(strict=True)
     except FileNotFoundError:
@@ -240,7 +238,7 @@ def get_entity_type(entity_type):
 
 @app.route("/<measurement>/anomalies", methods=['GET'])
 def get_measurement_anomalies(measurement):
-    path = 'anomaly_detector/dataset/anomalies/' + measurement + '.csv'
+    path = PATH+'/dataset/anomalies/' + measurement + '.csv'
     try:
         abs_path = Path(path).resolve(strict=True)
     except FileNotFoundError:
@@ -263,7 +261,7 @@ def verify_anomalies(measurement, uuid):
 
 if __name__ == "__main__":
     # define the loggin configuration files
-    logging.basicConfig(filename='anomaly_detector/status.log',
+    logging.basicConfig(filename=PATH+'/status.log',
                         format='%(asctime)s %(levelname)s %(name)s %(message)s',
                         level=logging.ERROR)
     logger = logging.getLogger(__name__)

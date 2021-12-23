@@ -1,0 +1,19 @@
+This back-end server supports the visualization of the results achieved. It exposes the following Rest APIs:
+
+GET/status
+It returns the log with the recent errors occurred
+
+GET /<measurement>/stats
+For the measurement selected (tdmp_bytes_created, tdmp_bytes_total, tdmp_packets_created, tdmp_packets_total),
+it returns the hash list with all the fields and values of which it is composed.
+
+GET /<measurement>/stats/<hash>
+For the measurement and hash selected, it returns the current value of the statistics used to calculate
+the Z-score value (mean, standard deviation, squared sum of values, and number of transactions).
+
+GET /<entity_type>
+For the entity_type selected (dst, dstp, src, srcp, service, and url), it returns the list with all the values seen.
+
+GET /<measurement>/anomalies
+For the measurement selected, it returns all the anomalies detected through the statistical-based approach.
+

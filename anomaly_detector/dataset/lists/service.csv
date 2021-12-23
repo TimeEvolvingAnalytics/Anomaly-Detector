@@ -92,3 +92,7 @@ epmd
 bgpsim
 vnetd
 binkp
+dicom
+csync2
+nsca
+nrpe
