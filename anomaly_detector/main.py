@@ -181,7 +181,6 @@ def periodic_update(riot_connector, influx_connector):
 
 
 @app.route("/")
-# TODO scrivere bene il file di testo su come navigare nel back-end
 def home():
     return send_file('info.txt')
 
