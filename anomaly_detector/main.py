@@ -33,7 +33,7 @@ def check_new_data(*args):
             schema.tagValues(\
             bucket:"' + influx_connector.get_bucket() + '",\
             tag: "' + tag + '",\
-            start: -' + str(riot_connector.get_frequency()) + 'h)'
+            start: -12h)'#' + str(riot_connector.get_frequency()) + 'h)'
         org = influx_connector.get_org()
         query_api = influx_connector.get_influxdb_connection()
         try:
@@ -48,7 +48,6 @@ def check_new_data(*args):
                     results.append((record.get_value()))
             diffs = list(set(results) - set(l))
             if len(diffs) != 0:
-                # TODO call API e salvare sul log risultato
                 for diff in diffs:
                     new_row = {'_value': diff}
                     df = df.append(new_row, ignore_index=True)
@@ -105,13 +104,14 @@ def check_new_anomalies(*args):
                 f += 'r["service"] == "' + service + '"'
             else:
                 f += 'r["service"] == "' + service + '" or '
-        q = 'from(bucket: "' + influx_connector.get_bucket + '")\
-          |> range(start: -' + str(riot_connector.get_frequency()) + 'h)\
+                # |> range(start: -' + str(riot_connector.get_frequency()) + 'h)\
+        q = 'from(bucket: "' + influx_connector.get_bucket() + '")\
+          |> range(start: -12h)\
           |> filter(fn: (r) => r["_measurement"] == "' + m + '")\
           |> filter(fn: (r) => ' + f + ')'
         try:
-            query_api = influx_connector.get_influxdb_connection
-            result = query_api.query(org=influx_connector.get_org, query=q)
+            query_api = influx_connector.get_influxdb_connection()
+            result = query_api.query(org=influx_connector.get_org(), query=q)
         except Exception as err:
             logger.exception(err)
             return
@@ -134,9 +134,12 @@ def check_new_anomalies(*args):
                                                                  riot_connector.get_tolerance()), axis=1)
             anomalies = df.loc[df['anomaly_diff'] == 1]
             if anomalies.shape[0] != 0:
-                # TODO call API POST e aggiungere try catch per gestire la post
                 anomalies_drop = anomalies.drop(['_value_diff_squared', 'new_hash', 'anomaly_diff'], axis=1)
                 anomalies_drop.index.names = ['uuid']
+                anomalies_to_send = anomalies_drop.to_csv(header=None, index=False).strip('\n').split('\n')
+                # sending anomalies to RIoT servers
+                for anomaly in anomalies_to_send:
+                    riot_connector.send_anomalies(anomaly)
                 if os.stat(PATH+'/dataset/anomalies/' + m + '.csv').st_size == 0:
                     anomalies_drop.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
                 else:
@@ -166,12 +169,12 @@ def periodic_update(riot_connector, influx_connector):
 
     scheduler.add_job(func=check_new_data,
                       trigger="interval",
-                      seconds=riot_connector.get_frequency() * 60 * 60,
+                      seconds=60,#riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
 
     scheduler.add_job(func=check_new_anomalies,
                       trigger="interval",
-                      seconds=riot_connector.get_frequency() * 60 * 60,
+                      seconds=60,#riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
 
     # Start the scheduler

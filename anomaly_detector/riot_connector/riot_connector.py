@@ -74,8 +74,27 @@ class RioTConnector:
             freq = response.json()['keys']['net_anomoly']['frequency']
             self._update_values(tol, freq)
         elif response.status_code == 404:
-            print("Error 404")
-            log.error('Error 404 in connecting to RioT server')
+            log.error('Get configuration parameters: Error 404 in connecting to RioT server')
         elif response.status_code == 401:
-            log.error('Error 401: Unauthorized access in connecting to RioT server')
+            log.error('Get configuration parameters: Error 401: Unauthorized access in connecting to RioT server')
         return self._tolerance, self._frequency
+
+    def send_anomalies(self, anomaly):
+        headers = {
+            'Authorization': self.create_auth('PUT'),
+            'Content-Type': "application/json",
+            'Cache-Control': "no-cache",
+            "Service": "net-anomoly",
+            "Level": "WARN",
+            "Message": "Traffic anomaly detected, DATA: " + anomaly
+        }
+        _uri = self._uri + "s/events?expand"
+        response = requests.put(self._base_uri + _uri, headers=headers)
+
+        log = logging.getLogger('__main__')
+
+        if response.status_code == 404:
+            log.error('Sending anomalies: Error 404 in connecting to RioT server')
+        elif response.status_code == 401:
+            log.error('Sending anomalies: Error 401: Unauthorized access in connecting to RioT server')
+        return
