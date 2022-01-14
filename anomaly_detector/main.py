@@ -26,7 +26,7 @@ def check_new_data(*args):
     influx_connector = args[1]
 
     for tag in tags:
-        path = PATH+'/dataset/lists/' + tag
+        path = PATH+'/dataset/lists/' + tag        
         df = pd.read_csv(path + '.csv', header=0)
         l = df['_value'].tolist()
         q = 'import "influxdata/influxdb/schema"\
@@ -92,7 +92,7 @@ def check_new_anomalies(*args):
     measurements = ['tdmp_bytes_created', 'tdmp_bytes_total', 'tdmp_packets_created', 'tdmp_packets_total']
     riot_connector = args[0]
     influx_connector = args[1]
-
+    print("start")
     for m in measurements:
         path = PATH+'/dataset/stats/' + m
         stats_dict = pd.read_csv(path + '.csv', header=0).set_index('hash_table').T.to_dict('list')
@@ -111,7 +111,9 @@ def check_new_anomalies(*args):
           |> filter(fn: (r) => ' + f + ')'
         try:
             query_api = influx_connector.get_influxdb_connection()
+            print("query start")
             result = query_api.query(org=influx_connector.get_org(), query=q)
+            print("query ok")
         except Exception as err:
             logger.exception(err)
             return
@@ -166,12 +168,12 @@ def periodic_update(riot_connector, influx_connector):
     # Create the background scheduler
     scheduler = BackgroundScheduler()
     # Create the job
-
+       
     scheduler.add_job(func=check_new_data,
                       trigger="interval",
                       seconds=60,#riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
-
+ 
     scheduler.add_job(func=check_new_anomalies,
                       trigger="interval",
                       seconds=60,#riot_connector.get_frequency() * 60 * 60,
