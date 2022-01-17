@@ -5,9 +5,9 @@ import random
 import logging
 
 
-class RioTConnector:
+class RIoTConnector:
     """
-    Connection to RioT server
+    Connection to RIoT server
     """
     #method = 'GET'
     #uri = '/global'  # use '/global' to access the variables, '/auth' only for the authentication

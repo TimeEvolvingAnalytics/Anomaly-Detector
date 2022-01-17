@@ -33,6 +33,6 @@ class InfluxConnector:
         client = influxdb_client.InfluxDBClient(
             url=self._url,
             token=self._token,
-            org=self._token
+            org=self._org
         )
         return client.query_api()

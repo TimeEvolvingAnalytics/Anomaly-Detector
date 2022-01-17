@@ -7,7 +7,7 @@ import atexit
 from apscheduler.schedulers.background import BackgroundScheduler
 import sys
 from influx_connector.influx_connector import InfluxConnector
-from riot_connector.riot_connector import RioTConnector
+from riot_connector.riot_connector import RIoTConnector
 import math
 import logging
 import os
@@ -33,7 +33,7 @@ def check_new_data(*args):
             schema.tagValues(\
             bucket:"' + influx_connector.get_bucket() + '",\
             tag: "' + tag + '",\
-            start: -12h)'#' + str(riot_connector.get_frequency()) + 'h)'
+            start: -' + str(riot_connector.get_frequency()) + 'h)'
         org = influx_connector.get_org()
         query_api = influx_connector.get_influxdb_connection()
         try:
@@ -96,6 +96,7 @@ def check_new_anomalies(*args):
     for m in measurements:
         path = PATH+'/dataset/stats/' + m
         stats_dict = pd.read_csv(path + '.csv', header=0).set_index('hash_table').T.to_dict('list')
+        """
         s = pd.read_csv(PATH+'/dataset/lists/service.csv', header=0)
         services = s['_value'].tolist()
         f = ''
@@ -105,10 +106,12 @@ def check_new_anomalies(*args):
             else:
                 f += 'r["service"] == "' + service + '" or '
                 # |> range(start: -' + str(riot_connector.get_frequency()) + 'h)\
+                """
         q = 'from(bucket: "' + influx_connector.get_bucket() + '")\
           |> range(start: -12h)\
           |> filter(fn: (r) => r["_measurement"] == "' + m + '")\
-          |> filter(fn: (r) => ' + f + ')'
+          |> filter(fn: (r) => r["service"] == "kx")'
+        print(q)
         try:
             query_api = influx_connector.get_influxdb_connection()
             print("query start")
@@ -168,12 +171,12 @@ def periodic_update(riot_connector, influx_connector):
     # Create the background scheduler
     scheduler = BackgroundScheduler()
     # Create the job
-       
+    """
     scheduler.add_job(func=check_new_data,
                       trigger="interval",
                       seconds=60,#riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
- 
+    """
     scheduler.add_job(func=check_new_anomalies,
                       trigger="interval",
                       seconds=60,#riot_connector.get_frequency() * 60 * 60,
@@ -279,7 +282,7 @@ if __name__ == "__main__":
 
     config = sys.argv[1:]
     riot_config = config[:3]
-    riot_connector = RioTConnector(riot_config[0], riot_config[1], riot_config[2])
+    riot_connector = RIoTConnector(riot_config[0], riot_config[1], riot_config[2])
     riot_connector.get_config_param()
     connection_config = config[3:7]
     influx_connector = InfluxConnector(connection_config[0], connection_config[1], connection_config[2], connection_config[3])
