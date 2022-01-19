@@ -1,0 +1,6 @@
+flask
+requests
+influxdb-client
+pathlib
+apscheduler
+tzlocal==2.1

@@ -1,0 +1,8 @@
+version: "3"
+
+services:
+    anomalydetector:
+        build: ./anomaly_detector
+        ports:
+            - "5001:5000"
+        command: "-uri ${URI} -username ${USERNAME} -base_uri ${BASE_URI} -bucket ${BUCKET} -org ${ORG} -token ${TOKEN} -url ${URL}"

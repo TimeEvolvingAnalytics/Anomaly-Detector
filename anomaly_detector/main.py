@@ -11,6 +11,7 @@ from riot_connector.riot_connector import RIoTConnector
 import math
 import logging
 import os
+from argparse import ArgumentParser
 
 app = Flask(__name__)
 riot_connector = None
@@ -92,31 +93,15 @@ def check_new_anomalies(*args):
     measurements = ['tdmp_bytes_created', 'tdmp_bytes_total', 'tdmp_packets_created', 'tdmp_packets_total']
     riot_connector = args[0]
     influx_connector = args[1]
-    print("start")
     for m in measurements:
         path = PATH+'/dataset/stats/' + m
         stats_dict = pd.read_csv(path + '.csv', header=0).set_index('hash_table').T.to_dict('list')
-        """
-        s = pd.read_csv(PATH+'/dataset/lists/service.csv', header=0)
-        services = s['_value'].tolist()
-        f = ''
-        for service in services:
-            if service == services[-1]:
-                f += 'r["service"] == "' + service + '"'
-            else:
-                f += 'r["service"] == "' + service + '" or '
-                # |> range(start: -' + str(riot_connector.get_frequency()) + 'h)\
-                """
         q = 'from(bucket: "' + influx_connector.get_bucket() + '")\
-          |> range(start: -12h)\
-          |> filter(fn: (r) => r["_measurement"] == "' + m + '")\
-          |> filter(fn: (r) => r["service"] == "kx")'
-        print(q)
+          |> range(start: -' + str(riot_connector.get_frequency()) + 'h)\
+          |> filter(fn: (r) => r["_measurement"] == "' + m + '")'
         try:
             query_api = influx_connector.get_influxdb_connection()
-            print("query start")
             result = query_api.query(org=influx_connector.get_org(), query=q)
-            print("query ok")
         except Exception as err:
             logger.exception(err)
             return
@@ -128,58 +113,58 @@ def check_new_anomalies(*args):
                                     record.values.get("proto"), record.values.get("service"), record.values.get("src"),
                                     record.values.get("srcp"), record.values.get("url"), record.get_value()])
             df = pd.DataFrame(results, columns=['_time', 'dst', 'dstp', 'proto', 'service', 'src', 'srcp', 'url', '_value'])
-            df['_value_diff'] = df['_value'].diff()
-            df['_value_diff_squared'] = df['_value_diff'].pow(2)
-            df['hash_table'] = df.apply(
-                lambda row: row['dst'] + '_' + row['dstp'] + '_' + row['proto'] + '_' + row['service'] + '_' + row[
-                    'src'] + '_' + row['srcp'] + '_' + row['url'], axis=1)
-            stats_dict, df = update_stats_dict(stats_dict, df)
-            df['anomaly_diff'] = df.apply(lambda row: is_anomaly(row['_value_diff'], stats_dict[row['hash_table']][0],
-                                                                stats_dict[row['hash_table']][1],
-                                                                 riot_connector.get_tolerance()), axis=1)
-            anomalies = df.loc[df['anomaly_diff'] == 1]
-            if anomalies.shape[0] != 0:
-                anomalies_drop = anomalies.drop(['_value_diff_squared', 'new_hash', 'anomaly_diff'], axis=1)
-                anomalies_drop.index.names = ['uuid']
-                anomalies_to_send = anomalies_drop.to_csv(header=None, index=False).strip('\n').split('\n')
-                # sending anomalies to RIoT servers
-                for anomaly in anomalies_to_send:
-                    riot_connector.send_anomalies(anomaly)
-                if os.stat(PATH+'/dataset/anomalies/' + m + '.csv').st_size == 0:
-                    anomalies_drop.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
-                else:
-                    existing_anomalies = pd.read_csv(PATH+'/dataset/anomalies/' + m + '.csv').append(
-                        anomalies_drop, ignore_index=True)
-                    existing_anomalies.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
-            normalities = df.loc[(df['anomaly_diff'] == 0) & (df['new_hash'] == 0)]
-            if normalities.shape[0] != 0:
-                for index, row in normalities.iterrows():
-                    stat = stats_dict[row['hash_table']]
-                    # avg += (value-avg)/n
-                    stat[0] += (row['_value_diff'] - stat[0]) / stat[2]
-                    stat[3] += math.pow(row['_value_diff'], 2)
-                    stat[2] += 1
-                    # std = sqrt((1/(n-1)*(ss-(avg.pow(2)/n))))
-                    stat[1] = math.sqrt((1 / (stat[2] - 1)) * (stat[3] - (math.pow(stat[0], 2) / stat[2])))
-                    stats_dict[row['hash_table']] = stat
-            pd.DataFrame.from_dict(stats_dict, orient='index').reset_index().rename(
-                columns={'index': 'hash_table', 0: 'avg_diff', 1: 'std_diff', 2: 'cnt_diff', 3: 'ss_diff'}).to_csv(
-                path + '.csv', index=False)
+            if df.shape[0] != 0:
+                df['_value_diff'] = df['_value'].diff()
+                df['_value_diff_squared'] = df['_value_diff'].pow(2)
+                df['hash_table'] = df.apply(
+                    lambda row: row['dst'] + '_' + row['dstp'] + '_' + row['proto'] + '_' + row['service'] + '_' + row[
+                        'src'] + '_' + row['srcp'] + '_' + row['url'], axis=1)
+                stats_dict, df = update_stats_dict(stats_dict, df)
+                df['anomaly_diff'] = df.apply(lambda row: is_anomaly(row['_value_diff'], stats_dict[row['hash_table']][0],
+                                                                    stats_dict[row['hash_table']][1],
+                                                                     riot_connector.get_tolerance()), axis=1)
+                anomalies = df.loc[df['anomaly_diff'] == 1]
+                if anomalies.shape[0] != 0:
+                    anomalies_drop = anomalies.drop(['_value_diff_squared', 'new_hash', 'anomaly_diff'], axis=1)
+                    anomalies_drop.index.names = ['uuid']
+                    anomalies_to_send = anomalies_drop.to_csv(header=None, index=False).strip('\n').split('\n')
+                    # sending anomalies to RIoT servers
+                    for anomaly in anomalies_to_send:
+                        riot_connector.send_anomalies(anomaly)
+                    if os.stat(PATH+'/dataset/anomalies/' + m + '.csv').st_size == 0:
+                        anomalies_drop.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
+                    else:
+                        existing_anomalies = pd.read_csv(PATH+'/dataset/anomalies/' + m + '.csv').append(
+                            anomalies_drop, ignore_index=True)
+                        existing_anomalies.to_csv(PATH+'/dataset/anomalies/' + m + '.csv', index=True)
+                normalities = df.loc[(df['anomaly_diff'] == 0) & (df['new_hash'] == 0)]
+                if normalities.shape[0] != 0:
+                    for index, row in normalities.iterrows():
+                        stat = stats_dict[row['hash_table']]
+                        # avg += (value-avg)/n
+                        stat[0] += (row['_value_diff'] - stat[0]) / stat[2]
+                        stat[3] += math.pow(row['_value_diff'], 2)
+                        stat[2] += 1
+                        # std = sqrt((1/(n-1)*(ss-(avg.pow(2)/n))))
+                        stat[1] = math.sqrt((1 / (stat[2] - 1)) * (stat[3] - (math.pow(stat[0], 2) / stat[2])))
+                        stats_dict[row['hash_table']] = stat
+                pd.DataFrame.from_dict(stats_dict, orient='index').reset_index().rename(
+                    columns={'index': 'hash_table', 0: 'avg_diff', 1: 'std_diff', 2: 'cnt_diff', 3: 'ss_diff'}).to_csv(
+                    path + '.csv', index=False)
 
 
 def periodic_update(riot_connector, influx_connector):
     # Create the background scheduler
     scheduler = BackgroundScheduler()
-    # Create the job
-    """
+    # Create the jobs
     scheduler.add_job(func=check_new_data,
                       trigger="interval",
-                      seconds=60,#riot_connector.get_frequency() * 60 * 60,
+                      seconds=riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
-    """
+
     scheduler.add_job(func=check_new_anomalies,
                       trigger="interval",
-                      seconds=60,#riot_connector.get_frequency() * 60 * 60,
+                      seconds=riot_connector.get_frequency() * 60 * 60,
                       args=(riot_connector, influx_connector))
 
     # Start the scheduler
@@ -280,11 +265,25 @@ if __name__ == "__main__":
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
-    config = sys.argv[1:]
-    riot_config = config[:3]
-    riot_connector = RIoTConnector(riot_config[0], riot_config[1], riot_config[2])
+    parser = ArgumentParser()
+    parser.add_argument('-uri')
+    parser.add_argument('-username')
+    parser.add_argument('-base_uri')
+    parser.add_argument('-bucket')
+    parser.add_argument('-org')
+    parser.add_argument('-token')
+    parser.add_argument('-url')
+    args = parser.parse_args()
+    uri = args.uri
+    username = args.username
+    base_uri = args.base_uri
+    bucket = args.bucket
+    org = args.org
+    token = args.token
+    url = args.url
+
+    riot_connector = RIoTConnector(uri, username, base_uri)
     riot_connector.get_config_param()
-    connection_config = config[3:7]
-    influx_connector = InfluxConnector(connection_config[0], connection_config[1], connection_config[2], connection_config[3])
+    influx_connector = InfluxConnector(bucket, org, token, url)
     periodic_update(riot_connector, influx_connector)
-    app.run()
+    app.run(host='0.0.0.0')
